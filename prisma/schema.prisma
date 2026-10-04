@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// The portfolio being balanced: cash on hand, cash you want to keep, and the
+/// last fetched USD/CAD rate. The app uses a single row.
+model Portfolio {
+  id            Int       @id @default(autoincrement())
+  name          String    @default("My portfolio")
+  cashCad       Float     @default(0)
+  cashUsd       Float     @default(0)
+  targetCashCad Float     @default(0)
+  targetCashUsd Float     @default(0)
+  /// false = only buy with available cash (no sells)
+  allowSells    Boolean   @default(true)
+  /// CAD per 1 USD
+  usdCad        Float?
+  usdCadSource  String?
+  usdCadAsOf    DateTime?
+  pricesAsOf    DateTime?
+  assets        Asset[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Asset {
+  id            Int       @id @default(autoincrement())
+  portfolioId   Int
+  portfolio     Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  /// Ticker without exchange suffix, e.g. "XIC" or "AVUV"
+  symbol        String
+  name          String    @default("")
+  /// Trading currency, which also picks the exchange: "CAD" (TSX) or "USD" (US)
+  currency      String
+  targetPercent Float
+  units         Float     @default(0)
+  position      Int       @default(0)
+  /// Last price in the asset's own currency
+  price         Float?
+  priceSource   String?
+  priceAsOf     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([portfolioId, symbol, currency])
+}

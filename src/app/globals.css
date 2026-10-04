@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* Ledger paper: green-tinted sheets, blue-black ink, red ink for selling. */
+:root {
+  --paper: #edf2e9;
+  --sheet: #f8faf5;
+  --rule: #c8d6c2;
+  --rule-strong: #6f8f75;
+  --ink: #17232d;
+  --ink-2: #46564f;
+  --ink-3: #5c6c65;
+  --accent: #1d6b46;
+  --on-accent: #f8faf5;
+  --bar: #1f7a4f;
+  --sell: #a3302a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121a16;
+    --sheet: #18231e;
+    --rule: #2b3a33;
+    --rule-strong: #5d7a69;
+    --ink: #e1eadf;
+    --ink-2: #b3c1b8;
+    --ink-3: #8e9e95;
+    --accent: #7cc79d;
+    --on-accent: #0f1813;
+    --bar: #46a673;
+    --sell: #ef8a7f;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-bar: var(--bar);
+  --color-sell: var(--sell);
+  --font-sans: var(--font-franklin), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+@media (forced-colors: active) {
+  /* Keep the weight bars visible when the OS overrides colors. */
+  .bg-bar,
+  .bg-ink {
+    forced-color-adjust: none;
+  }
+}
