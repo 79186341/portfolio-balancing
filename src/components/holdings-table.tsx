@@ -3,6 +3,7 @@
 import { money, percent, points, units } from "@/lib/format";
 import type { Analysis, Currency } from "@/lib/rebalance";
 import type { AssetData, AssetPatch, PortfolioData, PortfolioPatch } from "@/lib/types";
+import { CurrencyTag } from "./currency-tag";
 import { NumberInput } from "./number-input";
 import { WeightBar } from "./weight-bar";
 
@@ -30,17 +31,6 @@ const dash = <span className="text-ink-3">—</span>;
 const firstColumn = "sticky left-0 z-10 bg-paper pr-3 text-left align-middle sm:static";
 const cell = "px-3";
 
-function CurrencyTag({ currency }: { currency: Currency }) {
-  return (
-    <span
-      title={currency === "CAD" ? "Canadian dollars, listed on the TSX" : "US dollars, listed in the US"}
-      className="rounded-[3px] border border-rule-strong px-1 text-[11px] font-medium leading-4 text-ink-2"
-    >
-      {currency}
-    </span>
-  );
-}
-
 export function HoldingsTable({
   portfolio,
   analysis,
@@ -55,7 +45,8 @@ export function HoldingsTable({
   const keepingCash = portfolio.targetCashCad > 0 || portfolio.targetCashUsd > 0;
 
   return (
-    <div className="overflow-x-auto">
+    // `relative` keeps the sr-only text inside the scroll box instead of widening the page.
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[42rem] border-collapse text-[15px]">
         <caption className="sr-only">
           Holdings, cash, and targets. Weights are a share of the whole portfolio, valued in CAD.

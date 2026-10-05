@@ -40,3 +40,28 @@ export interface PriceRefresh {
   pricesAsOf: string | null;
   errors: string[];
 }
+
+export interface SnapshotAssetData {
+  symbol: string;
+  name: string;
+  currency: Currency;
+  targetPercent: number;
+  units: number;
+  price: number | null;
+}
+
+export const SNAPSHOT_LABEL_MAX_LENGTH = 80;
+
+/** The holdings, cash and prices as they were when the snapshot was saved. */
+export interface SnapshotData {
+  id: number;
+  label: string;
+  createdAt: string;
+  cashCad: number;
+  cashUsd: number;
+  targetCashCad: number;
+  targetCashUsd: number;
+  usdCad: number | null;
+  pricesAsOf: string | null;
+  assets: SnapshotAssetData[];
+}

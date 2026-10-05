@@ -32,6 +32,11 @@ project root; on first load it's seeded with the starting portfolio:
   exchanges). The ticker is checked against live prices before it's added. Remove one with ×.
 - The trades panel lists what to do in order: sells, then any currency conversion, then buys.
   Switch to **Buy only** to invest spare cash without selling anything.
+- **Save a snapshot** to keep a copy of your units, cash and prices under a label, like "Before
+  October rebalance". It's a copy: editing your holdings or removing a fund later doesn't change it.
+- The snapshot list shows each one's total value and the change since the one before. Under
+  **Compare**, pick a snapshot and a later one (or now) to see how each fund's units, price, value
+  and weight changed. Rename or delete snapshots from the list.
 
 ## How the plan is worked out
 
@@ -45,7 +50,9 @@ project root; on first load it's seeded with the starting portfolio:
   buys and the cash you keep. It uses the Bank of Canada rate, so your broker's rate will be a
   little worse.
 
-The logic is in `src/lib/rebalance.ts`, with tests in `src/lib/rebalance.test.ts`.
+The logic is in `src/lib/rebalance.ts`, with tests in `src/lib/rebalance.test.ts`. Snapshot
+comparisons are worked out in `src/lib/compare.ts`, which values each snapshot the same way, at the
+prices and exchange rate saved with it.
 
 ## Where prices come from
 
@@ -64,7 +71,7 @@ a source is down.
 | `npm run dev`   | Apply migrations and start the dev server on port 3001 |
 | `npm run build` | Production build                                       |
 | `npm start`     | Apply migrations and serve the build on port 3001      |
-| `npm test`      | Run the rebalancing tests                              |
+| `npm test`      | Run the rebalancing and snapshot comparison tests      |
 | `npm run lint`  | ESLint                                                 |
 
 ## Notes

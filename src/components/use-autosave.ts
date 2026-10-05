@@ -64,8 +64,11 @@ export function useAutosave(delayMs = 500) {
     if (jobs.current.size === 0 && inFlight.current === 0) setState("saved");
   }, []);
 
+  // Next.js runs server actions one at a time, in order, so an action called
+  // after this sees every change it sends.
+  const flushAll = useCallback(() => [...jobs.current.keys()].forEach(flush), [flush]);
+
   useEffect(() => {
-    const flushAll = () => [...jobs.current.keys()].forEach(flush);
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") flushAll();
     };
@@ -80,7 +83,7 @@ export function useAutosave(delayMs = 500) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [flush]);
+  }, [flushAll]);
 
-  return { state, schedule, flush, cancel };
+  return { state, schedule, flush, flushAll, cancel };
 }

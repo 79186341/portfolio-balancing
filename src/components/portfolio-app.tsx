@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { addAsset, refreshPrices, removeAsset, updateAsset, updatePortfolio } from "@/app/actions";
 import { shortDate, timestamp } from "@/lib/format";
 import { analyze, type Currency } from "@/lib/rebalance";
-import type { AssetData, AssetPatch, PortfolioData, PortfolioPatch, PriceRefresh } from "@/lib/types";
+import type { AssetData, AssetPatch, PortfolioData, PortfolioPatch, PriceRefresh, SnapshotData } from "@/lib/types";
 import { AddFundForm } from "./add-fund-form";
 import { HoldingsTable } from "./holdings-table";
+import { SnapshotsSection } from "./snapshots-section";
 import { TradesPanel } from "./trades-panel";
 import { useAutosave, type SaveState } from "./use-autosave";
+import { useHydrated } from "./use-hydrated";
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
@@ -27,13 +29,7 @@ function mergePrices(p: PortfolioData, refresh: PriceRefresh): PortfolioData {
   };
 }
 
-// Times are formatted in the browser's time zone, so only render them after hydration.
-const subscribeNoop = () => () => {};
-function useHydrated() {
-  return useSyncExternalStore(subscribeNoop, () => true, () => false);
-}
-
-export function PortfolioApp({ initial }: { initial: PortfolioData }) {
+export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; snapshots: SnapshotData[] }) {
   const [portfolio, setPortfolio] = useState(initial);
   const [problems, setProblems] = useState<string[]>([]);
   const [refreshing, startRefresh] = useTransition();
@@ -186,7 +182,8 @@ export function PortfolioApp({ initial }: { initial: PortfolioData }) {
           </div>
         </section>
 
-        <div className="xl:sticky xl:top-8">
+        {/* Spans both rows so it stays in view beside the snapshots on wide screens. */}
+        <div className="xl:sticky xl:top-8 xl:row-span-2">
           <TradesPanel
             analysis={analysis}
             allowSells={portfolio.allowSells}
@@ -194,6 +191,8 @@ export function PortfolioApp({ initial }: { initial: PortfolioData }) {
             rateSource={portfolio.usdCadSource}
           />
         </div>
+
+        <SnapshotsSection initial={snapshots} current={portfolio} onBeforeSave={autosave.flushAll} />
       </div>
     </main>
   );

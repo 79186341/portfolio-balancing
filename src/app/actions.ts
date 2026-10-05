@@ -4,7 +4,15 @@ import { getPortfolio, toAssetData } from "@/lib/portfolio";
 import { prisma } from "@/lib/prisma";
 import { fetchQuotes, fetchUsdCad } from "@/lib/quotes";
 import { CURRENCIES, type Currency } from "@/lib/rebalance";
-import type { AssetData, AssetPatch, PortfolioPatch, PriceRefresh } from "@/lib/types";
+import { createSnapshot } from "@/lib/snapshots";
+import {
+  SNAPSHOT_LABEL_MAX_LENGTH,
+  type AssetData,
+  type AssetPatch,
+  type PortfolioPatch,
+  type PriceRefresh,
+  type SnapshotData,
+} from "@/lib/types";
 
 // This app has no accounts: it's meant to run locally for one person. Put it
 // behind authentication before exposing it to a network.
@@ -145,4 +153,39 @@ export async function refreshPrices(): Promise<PriceRefresh> {
     pricesAsOf: fresh.pricesAsOf,
     errors,
   };
+}
+
+const LABEL_ERROR = `Give the snapshot a label of up to ${SNAPSHOT_LABEL_MAX_LENGTH} characters.`;
+
+/** The label with spacing tidied, or null if it's empty or too long. */
+function snapshotLabel(value: unknown): string | null {
+  const label = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  return label.length > 0 && label.length <= SNAPSHOT_LABEL_MAX_LENGTH ? label : null;
+}
+
+export type SaveSnapshotResult = { ok: true; snapshot: SnapshotData } | { ok: false; error: string };
+
+/** Saves the holdings, cash and last prices as they are in the database now. */
+export async function saveSnapshot(label: string): Promise<SaveSnapshotResult> {
+  const clean = snapshotLabel(label);
+  if (!clean) return { ok: false, error: LABEL_ERROR };
+  return { ok: true, snapshot: await createSnapshot(await getPortfolio(), clean) };
+}
+
+export type RenameSnapshotResult = { ok: true; label: string } | { ok: false; error: string };
+
+export async function renameSnapshot(snapshotId: number, label: string): Promise<RenameSnapshotResult> {
+  const clean = snapshotLabel(label);
+  if (!clean) return { ok: false, error: LABEL_ERROR };
+  const { id: portfolioId } = await getPortfolio();
+  await prisma.snapshot.updateMany({
+    where: { id: number(snapshotId, "snapshot", 1, Infinity), portfolioId },
+    data: { label: clean },
+  });
+  return { ok: true, label: clean };
+}
+
+export async function deleteSnapshot(snapshotId: number): Promise<void> {
+  const { id: portfolioId } = await getPortfolio();
+  await prisma.snapshot.deleteMany({ where: { id: number(snapshotId, "snapshot", 1, Infinity), portfolioId } });
 }

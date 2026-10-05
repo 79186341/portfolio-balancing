@@ -24,6 +24,7 @@ model Portfolio {
   usdCadAsOf    DateTime?
   pricesAsOf    DateTime?
   assets        Asset[]
+  snapshots     Snapshot[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -48,4 +49,36 @@ model Asset {
   updatedAt     DateTime  @updatedAt
 
   @@unique([portfolioId, symbol, currency])
+}
+
+/// A labelled copy of the holdings, cash and prices at one moment, kept for
+/// comparing over time. Later edits to the portfolio don't change it.
+model Snapshot {
+  id            Int             @id @default(autoincrement())
+  portfolioId   Int
+  portfolio     Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  label         String
+  cashCad       Float
+  cashUsd       Float
+  targetCashCad Float
+  targetCashUsd Float
+  /// CAD per 1 USD when the snapshot was saved
+  usdCad        Float?
+  pricesAsOf    DateTime?
+  assets        SnapshotAsset[]
+  createdAt     DateTime        @default(now())
+}
+
+model SnapshotAsset {
+  id            Int      @id @default(autoincrement())
+  snapshotId    Int
+  snapshot      Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  symbol        String
+  name          String
+  currency      String
+  targetPercent Float
+  units         Float
+  position      Int
+  /// Price in the asset's own currency, null if it hadn't loaded
+  price         Float?
 }
