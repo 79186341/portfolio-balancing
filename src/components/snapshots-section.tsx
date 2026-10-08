@@ -15,6 +15,7 @@ import { SnapshotComparison } from "./snapshot-comparison";
 import { useHydrated } from "./use-hydrated";
 
 interface SnapshotsSectionProps {
+  accountId: number;
   /** Newest first. */
   initial: SnapshotData[];
   /** The holdings on screen, compared as "Now". */
@@ -32,7 +33,7 @@ const quietButton =
 const dash = <span className="text-ink-3">—</span>;
 const serverDown = "Is the app's server running?";
 
-export function SnapshotsSection({ initial, current, onBeforeSave }: SnapshotsSectionProps) {
+export function SnapshotsSection({ accountId, initial, current, onBeforeSave }: SnapshotsSectionProps) {
   const [snapshots, setSnapshots] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function SnapshotsSection({ initial, current, onBeforeSave }: SnapshotsSe
 
   const save = async (label: string) => {
     onBeforeSave();
-    const result = await saveSnapshot(label);
+    const result = await saveSnapshot(accountId, label);
     if (result.ok) {
       setSnapshots((list) => [result.snapshot, ...list]);
       setFromId((id) => id ?? result.snapshot.id);
@@ -67,7 +68,7 @@ export function SnapshotsSection({ initial, current, onBeforeSave }: SnapshotsSe
   };
 
   const rename = async (id: number, label: string) => {
-    const result = await renameSnapshot(id, label);
+    const result = await renameSnapshot(accountId, id, label);
     if (result.ok) setSnapshots((list) => list.map((s) => (s.id === id ? { ...s, label: result.label } : s)));
     return result;
   };
@@ -76,7 +77,7 @@ export function SnapshotsSection({ initial, current, onBeforeSave }: SnapshotsSe
     if (!window.confirm(`Delete the snapshot “${snapshot.label}”?`)) return;
     setSnapshots((list) => list.filter((s) => s.id !== snapshot.id));
     try {
-      await deleteSnapshot(snapshot.id);
+      await deleteSnapshot(accountId, snapshot.id);
     } catch {
       setProblem(`Couldn't delete “${snapshot.label}”. Reload the page to see what was saved.`);
     }

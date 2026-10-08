@@ -3,7 +3,12 @@ import type { Prisma } from "@/generated/prisma/client";
 import { DEFAULT_ASSETS } from "./defaults";
 import { prisma } from "./prisma";
 import type { Currency } from "./rebalance";
-import type { AssetData, PortfolioData } from "./types";
+import type { AccountData, AssetData, PortfolioData } from "./types";
+
+// Each account, like a TFSA or RRSP, is one Portfolio row with its own funds,
+// cash and snapshots.
+
+const accountFields = { id: true, name: true } satisfies Prisma.PortfolioSelect;
 
 const withAssets = {
   assets: { orderBy: [{ position: "asc" }, { id: "asc" }] },
@@ -42,18 +47,57 @@ function toPortfolioData(p: PortfolioRow): PortfolioData {
   };
 }
 
-/** The app's one portfolio, created with the default funds on first use. */
-export async function getPortfolio(): Promise<PortfolioData> {
-  const existing = await prisma.portfolio.findFirst({ orderBy: { id: "asc" }, include: withAssets });
-  if (existing) return toPortfolioData(existing);
+/** The accounts in the order they were added. The first is created with the default funds on first use. */
+export async function getAccounts(): Promise<AccountData[]> {
+  const existing = await prisma.portfolio.findMany({ orderBy: { id: "asc" }, select: accountFields });
+  if (existing.length > 0) return existing;
 
-  const created = await prisma.$transaction(async (tx) => {
-    const raced = await tx.portfolio.findFirst({ orderBy: { id: "asc" }, include: withAssets });
-    if (raced) return raced;
-    return tx.portfolio.create({
+  return prisma.$transaction(async (tx) => {
+    const raced = await tx.portfolio.findMany({ orderBy: { id: "asc" }, select: accountFields });
+    if (raced.length > 0) return raced;
+    const created = await tx.portfolio.create({
       data: { assets: { create: DEFAULT_ASSETS.map((asset, position) => ({ ...asset, position })) } },
-      include: withAssets,
+      select: accountFields,
     });
+    return [created];
   });
-  return toPortfolioData(created);
+}
+
+/** An account's holdings, cash and last prices, or null if there's no such account. */
+export async function getPortfolio(accountId: number): Promise<PortfolioData | null> {
+  const portfolio = await prisma.portfolio.findUnique({ where: { id: accountId }, include: withAssets });
+  return portfolio && toPortfolioData(portfolio);
+}
+
+/**
+ * Adds an account. With `copyFrom`, it starts with that account's funds, targets
+ * and last prices, but no units or cash.
+ */
+export async function createAccount(name: string, copyFrom: PortfolioData | null): Promise<AccountData> {
+  return prisma.portfolio.create({
+    data: {
+      name,
+      ...(copyFrom && {
+        usdCad: copyFrom.usdCad,
+        usdCadSource: copyFrom.usdCadSource,
+        usdCadAsOf: copyFrom.usdCadAsOf,
+        pricesAsOf: copyFrom.pricesAsOf,
+        assets: {
+          create: copyFrom.assets.map(
+            ({ symbol, name, currency, targetPercent, price, priceSource, priceAsOf }, position) => ({
+              symbol,
+              name,
+              currency,
+              targetPercent,
+              price,
+              priceSource,
+              priceAsOf,
+              position,
+            }),
+          ),
+        },
+      }),
+    },
+    select: accountFields,
+  });
 }

@@ -82,6 +82,7 @@ export function useAutosave(delayMs = 500) {
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      flushAll(); // leaving the page, like when switching accounts
     };
   }, [flushAll]);
 

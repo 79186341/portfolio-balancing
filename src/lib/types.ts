@@ -2,6 +2,14 @@ import type { Currency } from "./rebalance";
 
 // Plain, serializable shapes passed from the server to the browser.
 
+export const ACCOUNT_NAME_MAX_LENGTH = 40;
+
+/** An account, like a TFSA or RRSP. Each has its own portfolio and snapshots. */
+export interface AccountData {
+  id: number;
+  name: string;
+}
+
 export interface AssetData {
   id: number;
   symbol: string;

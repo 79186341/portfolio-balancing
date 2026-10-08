@@ -1,7 +1,8 @@
 # Portfolio rebalancer
 
 A small Next.js app that works out the trades that bring a CAD/USD ETF portfolio back to
-its target allocation. Holdings and targets are stored in SQLite through Prisma.
+its target allocation, one account at a time. Holdings and targets are stored in SQLite through
+Prisma.
 
 ## Run it
 
@@ -12,7 +13,7 @@ npm run dev
 
 Open http://localhost:3001. The app uses port 3001 so it doesn't clash with anything on
 3000. `npm run dev` applies any pending migrations first. The database is `dev.db` in the
-project root; on first load it's seeded with the starting portfolio:
+project root; on first load it creates an account called "My portfolio" with the starting funds:
 
 | Fund                                             | Ticker | Listed in | Target |
 | ------------------------------------------------ | ------ | --------- | -----: |
@@ -25,6 +26,9 @@ project root; on first load it's seeded with the starting portfolio:
 
 ## Using it
 
+- Each account, like a TFSA or RRSP, has its own tab with its own holdings, cash, targets and
+  snapshots. **+ Add account** starts a new one, either with the same funds and targets as the
+  account you're on or with none. Rename or delete the account you're on with the pencil on its tab.
 - Enter the units you hold of each fund and your cash in CAD and USD. Changes save as you type.
 - Edit each fund's target percentage; targets must add up to 100%. For cash, the target is an
   amount to keep uninvested (zero by default).

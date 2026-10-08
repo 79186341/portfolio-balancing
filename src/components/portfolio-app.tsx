@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { addAsset, refreshPrices, removeAsset, updateAsset, updatePortfolio } from "@/app/actions";
 import { shortDate, timestamp } from "@/lib/format";
 import { analyze, type Currency } from "@/lib/rebalance";
-import type { AssetData, AssetPatch, PortfolioData, PortfolioPatch, PriceRefresh, SnapshotData } from "@/lib/types";
+import type {
+  AccountData,
+  AssetData,
+  AssetPatch,
+  PortfolioData,
+  PortfolioPatch,
+  PriceRefresh,
+  SnapshotData,
+} from "@/lib/types";
+import { AccountTabs } from "./account-tabs";
 import { AddFundForm } from "./add-fund-form";
 import { HoldingsTable } from "./holdings-table";
 import { SnapshotsSection } from "./snapshots-section";
@@ -29,7 +38,15 @@ function mergePrices(p: PortfolioData, refresh: PriceRefresh): PortfolioData {
   };
 }
 
-export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; snapshots: SnapshotData[] }) {
+interface PortfolioAppProps {
+  accounts: AccountData[];
+  /** The account on screen. */
+  initial: PortfolioData;
+  snapshots: SnapshotData[];
+}
+
+export function PortfolioApp({ accounts, initial, snapshots }: PortfolioAppProps) {
+  const accountId = initial.id;
   const [portfolio, setPortfolio] = useState(initial);
   const [problems, setProblems] = useState<string[]>([]);
   const [refreshing, startRefresh] = useTransition();
@@ -58,14 +75,14 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
   const refresh = useCallback(() => {
     startRefresh(async () => {
       try {
-        const result = await refreshPrices();
+        const result = await refreshPrices(accountId);
         setPortfolio((p) => mergePrices(p, result));
         setProblems(result.errors);
       } catch {
         setProblems(["Couldn't reach the app's server to refresh prices. Is it still running?"]);
       }
     });
-  }, []);
+  }, [accountId]);
 
   // Fetch prices on open if they're missing or more than 15 minutes old.
   const checkedOnOpen = useRef(false);
@@ -77,16 +94,16 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
 
   const changeAsset = (id: number, patch: AssetPatch) => {
     setPortfolio((p) => ({ ...p, assets: p.assets.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
-    autosave.schedule(`asset:${id}`, patch, (merged) => updateAsset(id, merged));
+    autosave.schedule(`asset:${id}`, patch, (merged) => updateAsset(accountId, id, merged));
   };
 
   const changePortfolio = (patch: PortfolioPatch) => {
     setPortfolio((p) => ({ ...p, ...patch }));
-    autosave.schedule("portfolio", patch, updatePortfolio);
+    autosave.schedule("portfolio", patch, (merged) => updatePortfolio(accountId, merged));
   };
 
   const add = async (input: { symbol: string; currency: Currency; targetPercent: number }) => {
-    const result = await addAsset(input);
+    const result = await addAsset(accountId, input);
     if (result.ok) setPortfolio((p) => ({ ...p, assets: [...p.assets, result.asset] }));
     return result;
   };
@@ -96,7 +113,7 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
     autosave.cancel(`asset:${asset.id}`);
     setPortfolio((p) => ({ ...p, assets: p.assets.filter((a) => a.id !== asset.id) }));
     try {
-      await removeAsset(asset.id);
+      await removeAsset(accountId, asset.id);
     } catch {
       setProblems([`Couldn't remove ${asset.symbol}. Reload the page to see what was saved.`]);
     }
@@ -104,7 +121,7 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
 
   return (
     <main className="mx-auto w-full max-w-[84rem] px-4 pb-16 pt-6 sm:px-6 sm:pt-10 xl:px-8">
-      <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-5 border-b border-rule-strong pb-6">
+      <header className="flex flex-wrap items-end justify-between gap-x-10 gap-y-5 pb-6">
         <h1 className="text-[1.75rem] font-semibold leading-tight tracking-tight text-ink">
           Portfolio rebalancer
         </h1>
@@ -152,6 +169,7 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
           </button>
         </div>
       </header>
+      <AccountTabs accounts={accounts} currentId={accountId} />
 
       {problems.length > 0 && (
         <div role="alert" className="mt-4 rounded-[4px] border border-sell/40 px-4 py-3 text-[13px] text-sell">
@@ -192,7 +210,12 @@ export function PortfolioApp({ initial, snapshots }: { initial: PortfolioData; s
           />
         </div>
 
-        <SnapshotsSection initial={snapshots} current={portfolio} onBeforeSave={autosave.flushAll} />
+        <SnapshotsSection
+          accountId={accountId}
+          initial={snapshots}
+          current={portfolio}
+          onBeforeSave={autosave.flushAll}
+        />
       </div>
     </main>
   );

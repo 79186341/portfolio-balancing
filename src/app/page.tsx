@@ -1,12 +1,11 @@
-import { PortfolioApp } from "@/components/portfolio-app";
-import { getPortfolio } from "@/lib/portfolio";
-import { getSnapshots } from "@/lib/snapshots";
+import { redirect } from "next/navigation";
+import { getAccounts } from "@/lib/portfolio";
 
-// Holdings live in the database, so render on every request.
+// Accounts live in the database, so look them up on every request.
 export const dynamic = "force-dynamic";
 
+/** Opens the first account. */
 export default async function Home() {
-  const portfolio = await getPortfolio();
-  const snapshots = await getSnapshots(portfolio.id);
-  return <PortfolioApp initial={portfolio} snapshots={snapshots} />;
+  const [first] = await getAccounts();
+  redirect(`/accounts/${first.id}`);
 }

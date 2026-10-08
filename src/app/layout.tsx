@@ -8,7 +8,8 @@ const franklin = Libre_Franklin({
 });
 
 export const metadata: Metadata = {
-  title: "Portfolio Rebalancer",
+  // Account pages put the account's name first: "TFSA · Portfolio Rebalancer".
+  title: { default: "Portfolio Rebalancer", template: "%s · Portfolio Rebalancer" },
   description: "Enter your holdings and see the trades that bring your portfolio back to its targets.",
 };
 
