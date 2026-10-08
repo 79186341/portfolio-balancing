@@ -39,6 +39,8 @@ function toPortfolioData(p: PortfolioRow): PortfolioData {
     targetCashCad: p.targetCashCad,
     targetCashUsd: p.targetCashUsd,
     allowSells: p.allowSells,
+    allowConversion: p.allowConversion,
+    allowFractional: p.allowFractional,
     usdCad: p.usdCad,
     usdCadSource: p.usdCadSource,
     usdCadAsOf: p.usdCadAsOf?.toISOString() ?? null,

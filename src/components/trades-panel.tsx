@@ -1,12 +1,13 @@
 "use client";
 
-import { money, percent } from "@/lib/format";
+import { money, percent, units } from "@/lib/format";
 import type { Analysis, Conversion, Currency, Trade } from "@/lib/rebalance";
+import type { PlanSettings } from "@/lib/types";
 
 interface TradesPanelProps {
   analysis: Analysis;
-  allowSells: boolean;
-  onAllowSellsChange: (allowSells: boolean) => void;
+  settings: PlanSettings;
+  onSettingsChange: (patch: Partial<PlanSettings>) => void;
   rateSource: string | null;
 }
 
@@ -17,8 +18,32 @@ function labelled(amount: number, currency: Currency) {
   return currency === "CAD" ? `${money(amount)} CAD` : money(amount, currency);
 }
 
-export function TradesPanel({ analysis, allowSells, onAllowSellsChange, rateSource }: TradesPanelProps) {
+/** What the plan does with these settings. */
+function summary({ allowSells, allowConversion, allowFractional }: PlanSettings) {
+  const shares = allowFractional ? "fractional shares" : "whole shares";
+  const trades = allowSells
+    ? `Sells what's over target to buy what's under, in ${shares}.`
+    : `Puts spare cash into what's furthest under target, in ${shares}. Nothing is sold.`;
+  return allowConversion ? trades : `${trades} Each currency's cash only buys funds listed in that currency.`;
+}
+
+/** Why the plan has no steps. */
+function nothingToDo({ allowSells, allowConversion }: PlanSettings) {
+  if (allowSells) {
+    return allowConversion
+      ? "You're on target. No trades needed."
+      : "You're as close to target as you can get without converting currency.";
+  }
+  const cash = allowConversion ? "spare cash" : "spare cash in the right currency";
+  return `There isn't enough ${cash} to buy anything. Add cash, or switch to buy and sell to rebalance.`;
+}
+
+const checkbox =
+  "size-3.5 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+
+export function TradesPanel({ analysis, settings, onSettingsChange, rateSource }: TradesPanelProps) {
   const { plan } = analysis;
+  const { allowSells } = settings;
 
   // Sell first to raise cash, then convert currency, then buy.
   const steps: Step[] = plan
@@ -45,7 +70,7 @@ export function TradesPanel({ analysis, allowSells, onAllowSellsChange, rateSour
                 key={option.label}
                 type="button"
                 aria-pressed={allowSells === option.value}
-                onClick={() => onAllowSellsChange(option.value)}
+                onClick={() => onSettingsChange({ allowSells: option.value })}
                 className={`rounded-[3px] px-2.5 py-1 font-medium focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
                   allowSells === option.value ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"
                 }`}
@@ -55,11 +80,27 @@ export function TradesPanel({ analysis, allowSells, onAllowSellsChange, rateSour
             ))}
           </div>
         </div>
-        <p className="mt-2 text-[13px] text-ink-3">
-          {allowSells
-            ? "Sells what's over target to buy what's under, in whole shares."
-            : "Puts spare cash into what's furthest under target. Nothing is sold."}
-        </p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-[13px] text-ink-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={settings.allowConversion}
+              onChange={(e) => onSettingsChange({ allowConversion: e.target.checked })}
+              className={checkbox}
+            />
+            Convert currency
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={settings.allowFractional}
+              onChange={(e) => onSettingsChange({ allowFractional: e.target.checked })}
+              className={checkbox}
+            />
+            Fractional shares
+          </label>
+        </div>
+        <p className="mt-2 text-[13px] text-ink-3">{summary(settings)}</p>
       </div>
 
       <div className="px-5 py-2" aria-live="polite">
@@ -70,11 +111,7 @@ export function TradesPanel({ analysis, allowSells, onAllowSellsChange, rateSour
             ))}
           </ul>
         ) : steps.length === 0 ? (
-          <p className="py-3 text-[15px] text-ink-2">
-            {allowSells
-              ? "You're on target. No trades needed."
-              : "There isn't enough spare cash to buy anything. Add cash, or switch to buy and sell to rebalance."}
-          </p>
+          <p className="py-3 text-[15px] text-ink-2">{nothingToDo(settings)}</p>
         ) : (
           <ol>
             {steps.map((step, i) => (
@@ -120,7 +157,7 @@ function TradeStep({ trade }: { trade: Trade }) {
           <span className={`font-semibold ${selling ? "text-sell" : "text-accent"}`}>
             {selling ? "Sell" : "Buy"}
           </span>{" "}
-          <span className="tabular-nums">{Math.abs(trade.units).toLocaleString("en-CA")}</span>{" "}
+          <span className="tabular-nums">{units(Math.abs(trade.units))}</span>{" "}
           <span className="font-semibold">{trade.symbol}</span>
         </p>
         <p className="text-[13px] tabular-nums text-ink-3">

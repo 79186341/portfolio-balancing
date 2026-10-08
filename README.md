@@ -35,7 +35,9 @@ project root; on first load it creates an account called "My portfolio" with the
 - Add a fund with its ticker and the currency it trades in (CAD for the TSX, USD for US
   exchanges). The ticker is checked against live prices before it's added. Remove one with ×.
 - The trades panel lists what to do in order: sells, then any currency conversion, then buys.
-  Switch to **Buy only** to invest spare cash without selling anything.
+  Switch to **Buy only** to invest spare cash without selling anything. Turn off **Convert
+  currency** to keep Canadian and US dollars apart, and turn on **Fractional shares** if your
+  broker trades them. Each account keeps its own settings.
 - **Save a snapshot** to keep a copy of your units, cash and prices under a label, like "Before
   October rebalance". It's a copy: editing your holdings or removing a fund later doesn't change it.
 - The snapshot list shows each one's total value and the change since the one before. Under
@@ -46,13 +48,21 @@ project root; on first load it creates an account called "My portfolio" with the
 
 - Everything is valued in CAD at the current USD/CAD rate. Fund targets apply to the total
   value minus the cash you keep.
-- Trades are whole shares. The plan starts as close to target as whole shares allow without
+- With whole shares, the plan starts as close to target as whole shares allow without
   overspending, then buys one more share at a time while that brings the portfolio closer to
   target, with leftover cash counted as off target.
+- With **Fractional shares**, it sells down to target and spends what that frees up, to 0.0001
+  of a share. Buys round down and sells round up, so the plan never spends cash you don't have.
+  Trades worth less than $1 are left out.
 - **Buy only** never sells. It spreads spare cash over the funds furthest below target.
 - After the trades, the plan converts only as much currency as each side needs to cover its
   buys and the cash you keep. It uses the Bank of Canada rate, so your broker's rate will be a
   little worse.
+- Without **Convert currency**, CAD cash only buys funds listed in CAD and US cash only funds
+  listed in USD, so each currency is balanced on its own, as if it were the whole portfolio. Its
+  funds' targets are scaled to what it holds: they stay in proportion to each other, and all its
+  spare cash is invested. If one currency holds more than its share, its funds end up over
+  target and the other currency's under, until you convert.
 
 The logic is in `src/lib/rebalance.ts`, with tests in `src/lib/rebalance.test.ts`. Snapshot
 comparisons are worked out in `src/lib/compare.ts`, which values each snapshot the same way, at the

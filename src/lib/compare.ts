@@ -70,6 +70,8 @@ function valuation(h: Holdings) {
     keepCash: { CAD: h.targetCashCad, USD: h.targetCashUsd },
     usdCad: h.usdCad,
     allowSells: true,
+    allowConversion: true,
+    allowFractional: false,
   });
   const { holdings, cash, totalValue } = analysis;
   return {

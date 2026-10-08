@@ -1,10 +1,16 @@
 // Pure rebalancing math, shared by the server and the browser.
 //
 // Everything is valued in CAD. Target percentages apply to the money you want
-// invested: total value minus the cash you've chosen to keep. Trades are whole
-// shares: the plan starts as close to the targets as whole shares allow without
-// overspending, then buys one share at a time while that brings the portfolio
-// (cash included) closer to target.
+// invested: total value minus the cash you've chosen to keep.
+//
+// With whole shares, the plan starts as close to the targets as whole shares
+// allow without overspending, then buys one share at a time while that brings
+// the portfolio (cash included) closer to target. With fractional shares, it
+// sells down to target and spends what that frees up, to 0.0001 of a share.
+//
+// Without currency conversion, each currency's cash only buys the funds listed
+// in it, so each currency is balanced on its own, as if it were the whole
+// portfolio: its funds' targets are scaled to add up to what it has to invest.
 
 export type Currency = "CAD" | "USD";
 
@@ -30,6 +36,10 @@ export interface RebalanceInput {
   usdCad: number | null;
   /** When false, only buy with spare cash. */
   allowSells: boolean;
+  /** When false, each currency's cash only buys funds listed in that currency. */
+  allowConversion: boolean;
+  /** When true, trades can be fractions of a share. */
+  allowFractional: boolean;
 }
 
 export interface HoldingRow {
@@ -103,11 +113,18 @@ export interface Analysis {
 
 const EPS = 1e-9;
 const TARGET_SUM_TOLERANCE = 0.001;
+/** Fractional trades are in steps of 0.0001 of a share. */
+const SHARE_STEPS = 10_000;
+/** Fractional trades worth less than this, in the fund's own currency, are left out. */
+const MIN_FRACTIONAL_TRADE = 1;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+// The nudges stop float error (3.4521 × 10,000 = 34520.99…) from costing a step.
+const sharesDown = (units: number) => Math.floor(units * SHARE_STEPS + 1e-6) / SHARE_STEPS;
+const sharesUp = (units: number) => Math.ceil(units * SHARE_STEPS - 1e-6) / SHARE_STEPS;
 
 export function analyze(input: RebalanceInput): Analysis {
-  const { holdings, cash, keepCash, usdCad, allowSells } = input;
+  const { holdings, cash, keepCash, usdCad, allowSells, allowConversion, allowFractional } = input;
   const fx = usdCad != null && usdCad > 0 ? usdCad : null;
   const toCad = (currency: Currency) => (currency === "CAD" ? 1 : fx);
 
@@ -207,6 +224,8 @@ export function analyze(input: RebalanceInput): Analysis {
     keepCash,
     usdCad: fx ?? 1,
     allowSells,
+    allowConversion,
+    allowFractional,
     weightsBefore: holdingRows.map((r) => r.weight!),
     targets: holdingRows.map((r) => r.target!),
     cashTargets: cashRows.map((r) => r.target!),
@@ -223,55 +242,59 @@ interface PlanInput {
   keepCash: Record<Currency, number>;
   usdCad: number;
   allowSells: boolean;
+  allowConversion: boolean;
+  allowFractional: boolean;
   weightsBefore: number[];
   targets: number[];
   cashTargets: number[];
 }
 
+/** Funds that trade from the same cash, and how much of it there is to spend (CAD). */
+interface Pool {
+  /** Indexes into the holdings. */
+  members: number[];
+  spare: number;
+}
+
 function buildPlan(p: PlanInput): Plan {
   const { holdings, prices, investable, totalValue, usdCad } = p;
   const ideal = holdings.map((h) => (investable * h.targetPercent) / 100);
-  const gap = (i: number, trade: number) => ideal[i] - (holdings[i].units + trade) * prices[i];
-  const spareCash = investable - sum(holdings.map((h, i) => h.units * prices[i]));
+  const values = holdings.map((h, i) => h.units * prices[i]);
 
-  // Starting point: as close to target as whole shares allow without overspending.
-  const trades = p.allowSells
-    ? holdings.map((h, i) => Math.max(Math.floor(gap(i, 0) / prices[i] + EPS), -h.units))
-    : waterFill(holdings.map((_, i) => gap(i, 0)), prices, spareCash);
+  // Converting lets any cash buy any fund. Without it, each currency's cash only
+  // buys the funds listed in that currency.
+  const pools: Pool[] = p.allowConversion
+    ? [{ members: holdings.map((_, i) => i), spare: investable - sum(values) }]
+    : CURRENCIES.map((c) => ({
+        members: holdings.flatMap((h, i) => (h.currency === c ? [i] : [])),
+        spare: (p.cash[c] - p.keepCash[c]) * (c === "CAD" ? 1 : usdCad),
+      }));
 
-  // Then spend what's left one share at a time, picking the purchase that most
-  // reduces the squared distance from target (with spare cash counted as off-target).
-  let spare = spareCash - sum(trades.map((t, i) => t * prices[i]));
-  for (;;) {
-    let best = -1;
-    let bestGain = EPS;
-    for (let i = 0; i < holdings.length; i++) {
-      if (holdings[i].targetPercent <= 0 || prices[i] > spare + EPS) continue;
-      const gain = prices[i] * (spare + gap(i, trades[i]) - prices[i]);
-      if (gain > bestGain) {
-        best = i;
-        bestGain = gain;
-      }
-    }
-    if (best < 0) break;
-    trades[best] += 1;
-    spare -= prices[best];
+  const trades = holdings.map(() => 0);
+  for (const pool of pools) {
+    // With one pool the targets already add up to what there is to invest.
+    const goals = p.allowConversion ? ideal : scaleGoals(pool, ideal, values);
+    const trade = p.allowFractional ? tradeFractions : tradeWholeShares;
+    trade(pool, goals, trades, p);
   }
 
   // Cash in each currency after trading, then the conversion that tops up whichever
-  // currency falls short of what you want to keep.
+  // currency falls short of what you want to keep. Without conversion, each
+  // currency's trades were paid for from its own cash.
   const cashAfter: Record<Currency, number> = { ...p.cash };
   holdings.forEach((h, i) => {
     cashAfter[h.currency] -= trades[i] * (h.price as number);
   });
   const surplus = (c: Currency) => cashAfter[c] - p.keepCash[c];
   let conversion: Conversion | null = null;
-  if (surplus("USD") < -EPS && surplus("CAD") > EPS) {
-    const usd = Math.min(-surplus("USD"), surplus("CAD") / usdCad);
-    conversion = { from: "CAD", to: "USD", amountFrom: usd * usdCad, amountTo: usd, rate: usdCad };
-  } else if (surplus("CAD") < -EPS && surplus("USD") > EPS) {
-    const cad = Math.min(-surplus("CAD"), surplus("USD") * usdCad);
-    conversion = { from: "USD", to: "CAD", amountFrom: cad / usdCad, amountTo: cad, rate: usdCad };
+  if (p.allowConversion) {
+    if (surplus("USD") < -EPS && surplus("CAD") > EPS) {
+      const usd = Math.min(-surplus("USD"), surplus("CAD") / usdCad);
+      conversion = { from: "CAD", to: "USD", amountFrom: usd * usdCad, amountTo: usd, rate: usdCad };
+    } else if (surplus("CAD") < -EPS && surplus("USD") > EPS) {
+      const cad = Math.min(-surplus("CAD"), surplus("USD") * usdCad);
+      conversion = { from: "USD", to: "CAD", amountFrom: cad / usdCad, amountTo: cad, rate: usdCad };
+    }
   }
   if (conversion) {
     cashAfter[conversion.from] -= conversion.amountFrom;
@@ -320,30 +343,117 @@ function buildPlan(p: PlanInput): Plan {
 }
 
 /**
+ * Targets (CAD) for one currency's funds when its cash can't be converted,
+ * scaled in proportion until they add up to what the currency has: its funds
+ * and its spare cash. That balances the currency as if it were the whole
+ * portfolio, keeping its funds in their target proportions to each other.
+ */
+function scaleGoals(pool: Pool, ideal: number[], values: number[]): number[] {
+  const goals = [...ideal];
+  const budget = pool.spare + sum(pool.members.map((i) => values[i]));
+  const idealSum = sum(pool.members.map((i) => ideal[i]));
+  // With nothing to invest or nothing to buy, aim for zero: sell what can be sold.
+  const scale = budget > 0 && idealSum > 0 ? budget / idealSum : 0;
+  for (const i of pool.members) goals[i] = ideal[i] * scale;
+  return goals;
+}
+
+/** Whole-share trades for one pool's funds, written into `trades`. */
+function tradeWholeShares(pool: Pool, goals: number[], trades: number[], p: PlanInput): void {
+  const { holdings, prices } = p;
+  const { members } = pool;
+  const gap = (i: number) => goals[i] - (holdings[i].units + trades[i]) * prices[i];
+
+  // Starting point: as close to target as whole shares allow without overspending.
+  if (p.allowSells) {
+    for (const i of members) trades[i] = Math.max(Math.floor(gap(i) / prices[i] + EPS), -holdings[i].units);
+  } else {
+    const buys = waterFill(members.map(gap), members.map((i) => prices[i]), pool.spare);
+    members.forEach((i, k) => {
+      trades[i] = buys[k];
+    });
+  }
+
+  // Then spend what's left one share at a time, picking the purchase that most
+  // reduces the squared distance from target (with spare cash counted as off-target).
+  let spare = pool.spare - sum(members.map((i) => trades[i] * prices[i]));
+  for (;;) {
+    let best = -1;
+    let bestGain = EPS;
+    for (const i of members) {
+      if (holdings[i].targetPercent <= 0 || prices[i] > spare + EPS) continue;
+      const gain = prices[i] * (spare + gap(i) - prices[i]);
+      if (gain > bestGain) {
+        best = i;
+        bestGain = gain;
+      }
+    }
+    if (best < 0) break;
+    trades[best] += 1;
+    spare -= prices[best];
+  }
+}
+
+/**
+ * Fractional trades for one pool's funds, written into `trades`: sell what's over
+ * target, then spend the spare cash and what the sales raise so the shortfalls
+ * even out.
+ */
+function tradeFractions(pool: Pool, goals: number[], trades: number[], p: PlanInput): void {
+  const { holdings, prices } = p;
+  const worthTrading = (i: number, units: number) => units * (holdings[i].price as number) >= MIN_FRACTIONAL_TRADE;
+
+  let cash = pool.spare;
+  const selling = new Set<number>();
+  if (p.allowSells) {
+    for (const i of pool.members) {
+      const { units } = holdings[i];
+      const excess = units * prices[i] - goals[i];
+      if (excess <= EPS) continue;
+      // Rounded up so the sale raises enough, or the whole holding when none should be left.
+      const sell = goals[i] > EPS ? Math.min(units, sharesUp(excess / prices[i])) : units;
+      if (!worthTrading(i, sell)) continue;
+      trades[i] = -sell;
+      cash += sell * prices[i];
+      selling.add(i);
+    }
+  }
+
+  const buyable = pool.members.filter((i) => holdings[i].targetPercent > 0 && !selling.has(i));
+  if (cash <= EPS || buyable.length === 0) return;
+  const gaps = buyable.map((i) => goals[i] - holdings[i].units * prices[i]);
+  const level = waterLevel(gaps, cash);
+  buyable.forEach((i, k) => {
+    // Rounded down so the purchases never cost more than there is.
+    const buy = sharesDown(Math.max(0, gaps[k] - level) / prices[i]);
+    if (worthTrading(i, buy)) trades[i] = buy;
+  });
+}
+
+/**
  * Buy-only starting point: spend `cash` on the holdings furthest below target so
  * their shortfalls even out (classic water-filling), rounded down to whole shares.
  */
 function waterFill(gaps: number[], prices: number[], cash: number): number[] {
   const buys = gaps.map(() => 0);
-  if (cash <= 0) return buys;
-  const under = gaps
-    .map((g, i) => ({ g, i }))
-    .filter(({ g }) => g > 0)
-    .sort((a, b) => b.g - a.g);
-  // Find the common shortfall `level` such that sum(max(0, gap − level)) = cash.
-  let level = 0;
-  let running = 0;
-  for (let k = 0; k < under.length; k++) {
-    running += under[k].g;
-    const candidate = (running - cash) / (k + 1);
-    const next = under[k + 1]?.g ?? -Infinity;
-    if (candidate >= next) {
-      level = Math.max(candidate, 0);
-      break;
-    }
-  }
-  for (const { g, i } of under) {
+  const under = gaps.filter((g) => g > 0);
+  if (cash <= 0 || under.length === 0) return buys;
+  // Fill no further than the targets; the one-share-at-a-time pass spends any rest.
+  const level = Math.max(waterLevel(under, cash), 0);
+  gaps.forEach((g, i) => {
     if (g > level) buys[i] = Math.floor((g - level) / prices[i] + EPS);
-  }
+  });
   return buys;
+}
+
+/** The common level L where sum(max(0, value − L)) = amount, for a positive amount. */
+function waterLevel(values: number[], amount: number): number {
+  const sorted = [...values].sort((a, b) => b - a);
+  let running = 0;
+  for (let k = 0; k < sorted.length; k++) {
+    running += sorted[k];
+    const level = (running - amount) / (k + 1);
+    if (level >= (sorted[k + 1] ?? -Infinity)) return level;
+  }
+  return -Infinity; // only reached with no values
 }

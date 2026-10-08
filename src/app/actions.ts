@@ -60,9 +60,10 @@ export async function updatePortfolio(accountId: number, patch: PortfolioPatch):
   if (patch.targetCashUsd !== undefined) {
     data.targetCashUsd = number(patch.targetCashUsd, "USD cash to keep", 0, MAX_AMOUNT);
   }
-  if (patch.allowSells !== undefined) {
-    if (typeof patch.allowSells !== "boolean") throw new Error("Invalid allowSells");
-    data.allowSells = patch.allowSells;
+  for (const setting of ["allowSells", "allowConversion", "allowFractional"] as const) {
+    if (patch[setting] === undefined) continue;
+    if (typeof patch[setting] !== "boolean") throw new Error(`Invalid ${setting}`);
+    data[setting] = patch[setting];
   }
   // updateMany: a save that lands after the account was deleted is a no-op, not an error.
   await prisma.portfolio.updateMany({ where: { id: accountIdOf(accountId) }, data });

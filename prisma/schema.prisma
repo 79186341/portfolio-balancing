@@ -7,26 +7,30 @@ datasource db {
   provider = "sqlite"
 }
 
-/// The portfolio being balanced: cash on hand, cash you want to keep, and the
-/// last fetched USD/CAD rate. The app uses a single row.
+/// One account being balanced, like a TFSA or RRSP: cash on hand, cash you want
+/// to keep, how its plan may trade, and the last fetched USD/CAD rate.
 model Portfolio {
-  id            Int       @id @default(autoincrement())
-  name          String    @default("My portfolio")
-  cashCad       Float     @default(0)
-  cashUsd       Float     @default(0)
-  targetCashCad Float     @default(0)
-  targetCashUsd Float     @default(0)
+  id              Int        @id @default(autoincrement())
+  name            String     @default("My portfolio")
+  cashCad         Float      @default(0)
+  cashUsd         Float      @default(0)
+  targetCashCad   Float      @default(0)
+  targetCashUsd   Float      @default(0)
   /// false = only buy with available cash (no sells)
-  allowSells    Boolean   @default(true)
+  allowSells      Boolean    @default(true)
+  /// false = each currency's cash only buys funds listed in that currency
+  allowConversion Boolean    @default(true)
+  /// true = trades can be fractions of a share
+  allowFractional Boolean    @default(false)
   /// CAD per 1 USD
-  usdCad        Float?
-  usdCadSource  String?
-  usdCadAsOf    DateTime?
-  pricesAsOf    DateTime?
-  assets        Asset[]
-  snapshots     Snapshot[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  usdCad          Float?
+  usdCadSource    String?
+  usdCadAsOf      DateTime?
+  pricesAsOf      DateTime?
+  assets          Asset[]
+  snapshots       Snapshot[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }
 
 model Asset {

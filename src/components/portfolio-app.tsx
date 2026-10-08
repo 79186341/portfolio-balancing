@@ -68,6 +68,8 @@ export function PortfolioApp({ accounts, initial, snapshots }: PortfolioAppProps
         keepCash: { CAD: portfolio.targetCashCad, USD: portfolio.targetCashUsd },
         usdCad: portfolio.usdCad,
         allowSells: portfolio.allowSells,
+        allowConversion: portfolio.allowConversion,
+        allowFractional: portfolio.allowFractional,
       }),
     [portfolio],
   );
@@ -204,8 +206,8 @@ export function PortfolioApp({ accounts, initial, snapshots }: PortfolioAppProps
         <div className="xl:sticky xl:top-8 xl:row-span-2">
           <TradesPanel
             analysis={analysis}
-            allowSells={portfolio.allowSells}
-            onAllowSellsChange={(allowSells) => changePortfolio({ allowSells })}
+            settings={portfolio}
+            onSettingsChange={changePortfolio}
             rateSource={portfolio.usdCadSource}
           />
         </div>

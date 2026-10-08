@@ -29,6 +29,8 @@ export interface PortfolioData {
   targetCashCad: number;
   targetCashUsd: number;
   allowSells: boolean;
+  allowConversion: boolean;
+  allowFractional: boolean;
   usdCad: number | null;
   usdCadSource: string | null;
   usdCadAsOf: string | null;
@@ -36,8 +38,11 @@ export interface PortfolioData {
   assets: AssetData[];
 }
 
+/** How an account's plan may trade. */
+export type PlanSettings = Pick<PortfolioData, "allowSells" | "allowConversion" | "allowFractional">;
+
 export type PortfolioPatch = Partial<
-  Pick<PortfolioData, "cashCad" | "cashUsd" | "targetCashCad" | "targetCashUsd" | "allowSells">
+  Pick<PortfolioData, "cashCad" | "cashUsd" | "targetCashCad" | "targetCashUsd"> & PlanSettings
 >;
 
 export type AssetPatch = Partial<Pick<AssetData, "units" | "targetPercent">>;
